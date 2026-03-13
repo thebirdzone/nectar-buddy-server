@@ -160,6 +160,11 @@ app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
 });
 
+app.get('/api/debug-users', (req, res) => {
+  const users = db.get('users').value();
+  res.json({ count: users.length, users: users.map(u => ({ id: u.id, zip: u.zip, city: u.city, active: u.active, notifyTime: u.notifyTime, lastChanged: u.lastChanged, hasPushSub: !!u.pushSubscription, updatedAt: u.updatedAt })) });
+});
+
 app.get('/', (req, res) => res.json({ status: 'Nectar Buddy server running' }));
 
 const PORT = process.env.PORT || 3000;
