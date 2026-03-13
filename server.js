@@ -8,7 +8,7 @@ const cors = require('cors');
 const app = express();
 app.use(express.json());
 app.use(cors({
-  origin: ['https://nectarbuddy.netlify.app', 'http://localhost']
+  origin: ['https://nectarbuddy.netlify.app', 'https://amymrangel-jpg.github.io', 'http://localhost']
 }));
 
 // ---- Database ----
