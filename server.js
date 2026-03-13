@@ -1,9 +1,8 @@
 const express = require('express');
 const webpush = require('web-push');
 const cron = require('node-cron');
-const low = require('lowdb');
-const FileSync = require('lowdb/adapters/FileSync');
 const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(express.json());
@@ -11,10 +10,8 @@ app.use(cors({
   origin: ['https://nectarbuddy.netlify.app', 'https://thebirdzone.github.io', 'http://localhost']
 }));
 
-// ---- Database ----
-const adapter = new FileSync('db.json');
-const db = low(adapter);
-db.defaults({ users: [] }).write();
+// ---- Supabase ----
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // ---- VAPID Keys ----
 webpush.setVapidDetails(
@@ -33,16 +30,16 @@ function daysBetween(d1, d2) { return Math.round((new Date(d2) - new Date(d1)) /
 
 // ---- Weather fetch ----
 async function fetchWeatherForUser(user) {
-  const { lat, lon, lastChanged, effectiveDueDate } = user;
+  const { lat, lon, last_changed, effective_due_date } = user;
   const todayStr = today();
   const maxEnd = new Date(todayStr + 'T12:00:00');
   maxEnd.setDate(maxEnd.getDate() + 5);
   const maxEndStr = maxEnd.toISOString().split('T')[0];
-  const forecastEndStr = effectiveDueDate && effectiveDueDate < maxEndStr ? effectiveDueDate : maxEndStr;
+  const forecastEndStr = effective_due_date && effective_due_date < maxEndStr ? effective_due_date : maxEndStr;
   const yesterday = new Date(todayStr + 'T12:00:00');
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
-  const resetDate = lastChanged || todayStr;
+  const resetDate = last_changed || todayStr;
   const allTemps = [];
 
   const fResp = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max&temperature_unit=fahrenheit&start_date=${todayStr}&end_date=${forecastEndStr}&timezone=auto`);
@@ -72,7 +69,7 @@ async function fetchWeatherForUser(user) {
   let peakTemp = null, peakTempDate = null, peakType = null, bestDueDate = null;
   allTemps.forEach(entry => {
     const interval = getInterval(entry.temp);
-    const due = new Date((lastChanged || todayStr) + 'T12:00:00');
+    const due = new Date((last_changed || todayStr) + 'T12:00:00');
     due.setDate(due.getDate() + interval);
     let dueDateStr = due.toISOString().split('T')[0];
     if (entry.type === 'forecast' && entry.date > todayStr && dueDateStr < entry.date) dueDateStr = entry.date;
@@ -92,27 +89,31 @@ async function processUser(user) {
     if (!w.bestDueDate) return;
     const daysLeft = daysBetween(today(), w.bestDueDate);
 
-    db.get('users').find({ id: user.id }).assign({
-      lastTemp: w.todayTemp, peakTemp: w.peakTemp, peakTempDate: w.peakTempDate,
-      peakType: w.peakType, effectiveDueDate: w.bestDueDate, lastChecked: new Date().toISOString()
-    }).write();
+    await supabase.from('users').update({
+      last_temp: w.todayTemp,
+      peak_temp: w.peakTemp,
+      peak_temp_date: w.peakTempDate,
+      peak_type: w.peakType,
+      effective_due_date: w.bestDueDate,
+      last_checked: new Date().toISOString()
+    }).eq('id', user.id);
 
-    if (!user.pushSubscription) return;
+    if (!user.push_subscription) return;
 
     let title, body;
     if (daysLeft <= 0) {
       title = '🌺 Change Hummingbird Feeders!';
       body = `It's time to refresh your nectar! (${w.todayTemp}°F today)`;
     } else if (daysLeft === 1) {
-      const alreadyNotified = user.lastNotifiedDueDate === w.bestDueDate;
+      const alreadyNotified = user.last_notified_due_date === w.bestDueDate;
       title = alreadyNotified ? '🌺 Schedule Adjusted' : '🌺 Feeder Change Tomorrow';
       body = alreadyNotified
         ? `Schedule has been adjusted — feeder change now due tomorrow. (${w.todayTemp}°F today)`
         : `Heads-up — change the feeders tomorrow. (${w.todayTemp}°F today)`;
     } else { return; }
 
-    await webpush.sendNotification(user.pushSubscription, JSON.stringify({ title, body }));
-    db.get('users').find({ id: user.id }).assign({ lastNotifiedDueDate: w.bestDueDate }).write();
+    await webpush.sendNotification(user.push_subscription, JSON.stringify({ title, body }));
+    await supabase.from('users').update({ last_notified_due_date: w.bestDueDate }).eq('id', user.id);
 
   } catch (err) {
     console.error(`Error processing user ${user.id}:`, err.message);
@@ -127,10 +128,12 @@ cron.schedule('*/15 * * * *', async () => {
   const minutes = ct.getMinutes();
   const nowMinutes = hours * 60 + minutes;
 
-  const users = db.get('users').value();
+  const { data: users, error } = await supabase.from('users').select('*').eq('active', true);
+  if (error) { console.error('Error fetching users:', error.message); return; }
+
   for (const user of users) {
-    if (!user.active || !user.notifyTime) continue;
-    const [uHour, uMin] = user.notifyTime.split(':').map(Number);
+    if (!user.notify_time) continue;
+    const [uHour, uMin] = user.notify_time.split(':').map(Number);
     const userMinutes = uHour * 60 + uMin;
     if (nowMinutes >= userMinutes && nowMinutes < userMinutes + 15) {
       await processUser(user);
@@ -139,20 +142,46 @@ cron.schedule('*/15 * * * *', async () => {
 });
 
 // ---- Routes ----
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { id, zip, lat, lon, city, pushSubscription, notifyTime, active, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate } = req.body;
   if (!id || !lat || !lon) return res.status(400).json({ error: 'Missing required fields' });
-  const existing = db.get('users').find({ id }).value();
-  const data = { id, zip, lat, lon, city, pushSubscription, notifyTime, active, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate, updatedAt: new Date().toISOString() };
-  if (existing) { db.get('users').find({ id }).assign(data).write(); }
-  else { db.get('users').push({ ...data, createdAt: new Date().toISOString() }).write(); }
+
+  const data = {
+    id, zip, lat, lon, city,
+    push_subscription: pushSubscription || null,
+    notify_time: notifyTime || '08:00',
+    active: active || false,
+    last_changed: lastChanged || null,
+    effective_due_date: effectiveDueDate || null,
+    peak_temp: peakTemp || null,
+    peak_temp_date: peakTempDate || null,
+    peak_type: peakType || null,
+    last_notified_due_date: lastNotifiedDueDate || null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from('users').upsert(data, { onConflict: 'id' });
+  if (error) { console.error('Register error:', error.message); return res.status(500).json({ error: error.message }); }
   res.json({ success: true });
 });
 
-app.post('/api/sync', (req, res) => {
-  const { id, active, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate } = req.body;
+app.post('/api/sync', async (req, res) => {
+  const { id, active, notifyTime, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate } = req.body;
   if (!id) return res.status(400).json({ error: 'Missing id' });
-  db.get('users').find({ id }).assign({ active, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate, updatedAt: new Date().toISOString() }).write();
+
+  const { error } = await supabase.from('users').update({
+    active,
+    notify_time: notifyTime || '08:00',
+    last_changed: lastChanged || null,
+    effective_due_date: effectiveDueDate || null,
+    peak_temp: peakTemp || null,
+    peak_temp_date: peakTempDate || null,
+    peak_type: peakType || null,
+    last_notified_due_date: lastNotifiedDueDate || null,
+    updated_at: new Date().toISOString()
+  }).eq('id', id);
+
+  if (error) { console.error('Sync error:', error.message); return res.status(500).json({ error: error.message }); }
   res.json({ success: true });
 });
 
@@ -160,9 +189,10 @@ app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
 });
 
-app.get('/api/debug-users', (req, res) => {
-  const users = db.get('users').value();
-  res.json({ count: users.length, users: users.map(u => ({ id: u.id, zip: u.zip, city: u.city, active: u.active, notifyTime: u.notifyTime, lastChanged: u.lastChanged, hasPushSub: !!u.pushSubscription, updatedAt: u.updatedAt })) });
+app.get('/api/debug-users', async (req, res) => {
+  const { data: users, error } = await supabase.from('users').select('id, zip, city, active, notify_time, last_changed, effective_due_date, updated_at, push_subscription');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ count: users.length, users: users.map(u => ({ ...u, hasPushSub: !!u.push_subscription, push_subscription: undefined })) });
 });
 
 app.get('/', (req, res) => res.json({ status: 'Nectar Buddy server running' }));
