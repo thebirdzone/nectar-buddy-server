@@ -25,6 +25,7 @@ function getInterval(t) {
   if (t >= 93) return 1; if (t >= 89) return 2; if (t >= 85) return 3;
   if (t >= 81) return 4; if (t >= 76) return 5; return 6;
 }
+function today() { return new Date().toISOString().split('T')[0]; }
 function todayInTimezone(tz) {
   const ct = new Date().toLocaleString('en-US', { timeZone: tz });
   const d = new Date(ct);
@@ -38,7 +39,7 @@ function currentTimeInTimezone(tz) {
   const d = new Date(ct);
   return { hours: d.getHours(), minutes: d.getMinutes() };
 }
-function daysBetween(d1, d2) { return Math.round((new Date(d2 + 'T12:00:00') - new Date(d1 + 'T12:00:00')) / 86400000); }
+function daysBetween(d1, d2) { return Math.round((new Date(d2 + 'T00:00:00') - new Date(d1 + 'T00:00:00')) / 86400000); }
 
 async function getTimezone(lat, lon) {
   try {
