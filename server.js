@@ -219,26 +219,6 @@ app.get('/api/debug-users', async (req, res) => {
   res.json({ count: users.length, users: users.map(u => ({ ...u, hasPushSub: !!u.push_subscription, push_subscription: undefined })) });
 });
 
-app.get('/api/test-notify', async (req, res) => {
-  const { data: users, error } = await supabase.from('users').select('*');
-  if (error) return res.status(500).json({ error: error.message });
-  if (!users || users.length === 0) return res.status(404).json({ error: 'No users found' });
-  const results = [];
-  for (const user of users) {
-    if (!user.push_subscription) { results.push({ id: user.id, result: 'no push subscription' }); continue; }
-    try {
-      await webpush.sendNotification(user.push_subscription, JSON.stringify({
-        title: '🌺 Nectar Buddy Test',
-        body: 'Push notifications are working!'
-      }));
-      results.push({ id: user.id, result: 'sent' });
-    } catch(e) {
-      results.push({ id: user.id, result: 'failed: ' + e.message });
-    }
-  }
-  res.json({ results });
-});
-
 app.get('/', (req, res) => res.json({ status: 'Nectar Buddy server running' }));
 
 const PORT = process.env.PORT || 3000;
