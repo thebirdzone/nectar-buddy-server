@@ -25,8 +25,30 @@ function getInterval(t) {
   if (t >= 93) return 1; if (t >= 89) return 2; if (t >= 85) return 3;
   if (t >= 81) return 4; if (t >= 76) return 5; return 6;
 }
-function today() { return new Date().toISOString().split('T')[0]; }
-function daysBetween(d1, d2) { return Math.round((new Date(d2) - new Date(d1)) / 86400000); }
+function todayInTimezone(tz) {
+  const ct = new Date().toLocaleString('en-US', { timeZone: tz });
+  const d = new Date(ct);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function currentTimeInTimezone(tz) {
+  const ct = new Date().toLocaleString('en-US', { timeZone: tz });
+  const d = new Date(ct);
+  return { hours: d.getHours(), minutes: d.getMinutes() };
+}
+function daysBetween(d1, d2) { return Math.round((new Date(d2 + 'T12:00:00') - new Date(d1 + 'T12:00:00')) / 86400000); }
+
+async function getTimezone(lat, lon) {
+  try {
+    const resp = await fetch(`https://timezonefinder.open-meteo.com/v1/find?latitude=${lat}&longitude=${lon}`);
+    const data = await resp.json();
+    return data.timezone || 'America/Chicago';
+  } catch(e) {
+    return 'America/Chicago';
+  }
+}
 
 // ---- Weather fetch ----
 async function fetchWeatherForUser(user) {
@@ -123,16 +145,16 @@ async function processUser(user) {
 // ---- Cron: every 15 minutes ----
 cron.schedule('*/15 * * * *', async () => {
   const now = new Date();
-  const ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-  const hours = ct.getHours();
-  const minutes = ct.getMinutes();
-  const nowMinutes = hours * 60 + minutes;
-
   const { data: users, error } = await supabase.from('users').select('*').eq('active', true);
   if (error) { console.error('Error fetching users:', error.message); return; }
 
   for (const user of users) {
     if (!user.notify_time) continue;
+    const tz = user.timezone || 'America/Chicago';
+    const userNow = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    const hours = userNow.getHours();
+    const minutes = userNow.getMinutes();
+    const nowMinutes = hours * 60 + minutes;
     const [uHour, uMin] = user.notify_time.split(':').map(Number);
     const userMinutes = uHour * 60 + uMin;
     if (nowMinutes >= userMinutes && nowMinutes < userMinutes + 15) {
@@ -143,11 +165,12 @@ cron.schedule('*/15 * * * *', async () => {
 
 // ---- Routes ----
 app.post('/api/register', async (req, res) => {
-  const { id, zip, lat, lon, city, pushSubscription, notifyTime, active, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate } = req.body;
+  const { id, zip, lat, lon, city, timezone, pushSubscription, notifyTime, active, lastChanged, effectiveDueDate, peakTemp, peakTempDate, peakType, lastNotifiedDueDate } = req.body;
   if (!id || !lat || !lon) return res.status(400).json({ error: 'Missing required fields' });
 
   const data = {
     id, zip, lat, lon, city,
+    timezone: timezone || 'America/Chicago',
     push_subscription: pushSubscription || null,
     notify_time: notifyTime || '08:00',
     active: active || false,
@@ -193,6 +216,26 @@ app.get('/api/debug-users', async (req, res) => {
   const { data: users, error } = await supabase.from('users').select('id, zip, city, active, notify_time, last_changed, effective_due_date, updated_at, push_subscription');
   if (error) return res.status(500).json({ error: error.message });
   res.json({ count: users.length, users: users.map(u => ({ ...u, hasPushSub: !!u.push_subscription, push_subscription: undefined })) });
+});
+
+app.get('/api/test-notify', async (req, res) => {
+  const { data: users, error } = await supabase.from('users').select('*');
+  if (error) return res.status(500).json({ error: error.message });
+  if (!users || users.length === 0) return res.status(404).json({ error: 'No users found' });
+  const results = [];
+  for (const user of users) {
+    if (!user.push_subscription) { results.push({ id: user.id, result: 'no push subscription' }); continue; }
+    try {
+      await webpush.sendNotification(user.push_subscription, JSON.stringify({
+        title: '🌺 Nectar Buddy Test',
+        body: 'Push notifications are working!'
+      }));
+      results.push({ id: user.id, result: 'sent' });
+    } catch(e) {
+      results.push({ id: user.id, result: 'failed: ' + e.message });
+    }
+  }
+  res.json({ results });
 });
 
 app.get('/', (req, res) => res.json({ status: 'Nectar Buddy server running' }));
