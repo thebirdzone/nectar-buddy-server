@@ -125,7 +125,7 @@ async function processUser(user) {
 
     let title, body;
     if (daysLeft <= 0) {
-      title = '🌺 Change Hummingbird Feeders!';
+      title = '🌺 Change Hummingbird Feeders';
       body = `It's time to refresh your nectar! (${w.todayTemp}°F today)`;
     } else if (daysLeft === 1) {
       const alreadyNotified = user.last_notified_due_date === w.bestDueDate;
