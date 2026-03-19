@@ -107,9 +107,18 @@ async function fetchWeatherForUser(user) {
 
 // ---- Process user notification ----
 async function processUser(user) {
+  let w = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      w = await fetchWeatherForUser(user);
+      break;
+    } catch(e) {
+      console.error(`Weather fetch attempt ${attempt} failed for user ${user.id}:`, e.message);
+      if (attempt < 3) await new Promise(r => setTimeout(r, 10000));
+    }
+  }
+  if (!w || !w.bestDueDate) { console.error(`Could not fetch weather for user ${user.id} after 3 attempts`); return; }
   try {
-    const w = await fetchWeatherForUser(user);
-    if (!w.bestDueDate) return;
     const daysLeft = daysBetween(today(), w.bestDueDate);
 
     await supabase.from('users').update({
