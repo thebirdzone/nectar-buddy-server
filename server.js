@@ -104,7 +104,8 @@ async function fetchWeatherForUser(user) {
 
   const todayForecastEntry = allTemps.find(x => x.date === todayStr && x.type === 'forecast');
   const todayActualEntry = allTemps.find(x => x.date === todayStr && x.type === 'actual');
-  const todayTemp = (todayActualEntry || todayForecastEntry)?.temp || null;
+  const todayTempEntry = todayActualEntry || todayForecastEntry;
+  const todayTemp = todayTempEntry ? todayTempEntry.temp : null;
   return { todayTemp, peakTemp, peakTempDate, peakType, bestDueDate };
 }
 
