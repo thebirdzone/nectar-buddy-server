@@ -95,14 +95,17 @@ async function fetchWeatherForUser(user) {
     const due = new Date((last_changed || todayStr) + 'T12:00:00');
     due.setDate(due.getDate() + interval);
     let dueDateStr = due.toISOString().split('T')[0];
-    if (entry.type === 'forecast' && entry.date > todayStr && dueDateStr < entry.date) dueDateStr = entry.date;
+    // Due date can never be earlier than the date the temp occurred (applies to all entries)
+    if (dueDateStr < entry.date) dueDateStr = entry.date;
     if (bestDueDate === null || dueDateStr < bestDueDate) {
       bestDueDate = dueDateStr; peakTemp = entry.temp; peakTempDate = entry.date; peakType = entry.type;
     }
   });
 
-  const todayEntry = allTemps.find(x => x.date === todayStr);
-  return { todayTemp: todayEntry ? todayEntry.temp : peakTemp, peakTemp, peakTempDate, peakType, bestDueDate };
+  const todayForecastEntry = allTemps.find(x => x.date === todayStr && x.type === 'forecast');
+  const todayActualEntry = allTemps.find(x => x.date === todayStr && x.type === 'actual');
+  const todayTemp = (todayActualEntry || todayForecastEntry)?.temp || null;
+  return { todayTemp, peakTemp, peakTempDate, peakType, bestDueDate };
 }
 
 // ---- Process user notification ----
