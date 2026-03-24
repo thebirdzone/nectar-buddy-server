@@ -58,7 +58,8 @@ async function fetchWeatherForUser(user) {
   const maxEnd = new Date(todayStr + 'T12:00:00');
   maxEnd.setDate(maxEnd.getDate() + 5);
   const maxEndStr = maxEnd.toISOString().split('T')[0];
-  const forecastEndStr = effective_due_date && effective_due_date < maxEndStr ? effective_due_date : maxEndStr;
+  // Cap at due date but never let it go earlier than today (handles overdue case)
+  const forecastEndStr = effective_due_date && effective_due_date > todayStr && effective_due_date < maxEndStr ? effective_due_date : maxEndStr;
   const yesterday = new Date(todayStr + 'T12:00:00');
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
