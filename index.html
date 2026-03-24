@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta property="og:title" content="Nectar Buddy">
+<meta property="og:description" content="Weather-based hummingbird nectar change reminders — knows when it's time based on your local temperature.">
+<meta property="og:image" content="https://thebirdzone.github.io/nectar-buddy/nectar-buddy-preview.png">
+<meta property="og:url" content="https://thebirdzone.github.io/nectar-buddy">
+<meta property="og:type" content="website">
+<meta name="apple-mobile-web-app-title" content="Nectar Buddy">
+<link rel="apple-touch-icon" href="nectar-buddy-icon.png">
+<link rel="manifest" href="manifest.json">
+<title>Nectar Buddy</title>
+<link rel="stylesheet" href="https://use.typekit.net/pnv7wtz.css">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2ede4; --bg2: #ede7dc; --surface: #faf7f2; --surface2: #ede7db;
+    --border: #d4c9b5; --border-dark: #b8a990;
+    --ruby: #be1e2d; --ruby-light: #d42a3a;
+    --emerald: #046A38; --emerald-light: #057d43;
+    --acid: #8DB600; --acid-hover: #a3d000;
+    --acid-dark: #6a8800; --acid-bg: #f0f8d8;
+    --buff: #c4a46a; --slate: #68797a;
+    --text: #1a2b1c; --text2: #344d36; --muted: #6e8070;
+    --danger: #be1e2d; --warn: #d9780e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Jost', sans-serif; min-height: 100vh; overflow-x: hidden; position: relative; }
+  body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse at 10% 5%, rgba(190,30,45,0.06) 0%, transparent 40%), radial-gradient(ellipse at 90% 85%, rgba(4,106,56,0.07) 0%, transparent 40%), radial-gradient(ellipse at 55% 45%, rgba(141,182,0,0.05) 0%, transparent 50%); pointer-events: none; z-index: 0; }
+  .container { max-width: 420px; margin: 0 auto; padding: 28px 20px 56px; position: relative; z-index: 1; }
+
+  /* ---- Location setup overlay ---- */
+  #location-overlay { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 200; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; padding: 32px 28px; overflow-y: auto; }
+  #location-overlay.visible { display: flex; }
+  .setup-leaf { display: block; width: 90px; height: 90px; margin: 0 auto 8px; }
+  .setup-title { font-family: 'Jost', sans-serif; font-size: 22px; font-weight: 300; color: var(--text2); line-height: 1.2; }
+  .setup-title em { font-family: "quincy-cf", serif; font-size: 36px; font-weight: 900; color: var(--text); font-style: normal; display: block; margin-top: 4px; text-transform: lowercase; }
+  .setup-tagline { font-size: 14px; color: var(--text2); line-height: 1.8; max-width: 320px; font-weight: 400; }
+  .setup-divider { width: 100%; max-width: 340px; height: 1px; background: var(--border); }
+  .setup-prompt { font-size: 13px; color: var(--muted); font-weight: 300; }
+  .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 340px; text-align: left; box-shadow: 0 2px 16px rgba(26,43,28,0.07); }
+  .setup-field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; display: block; font-weight: 600; }
+  .setup-input { width: 100%; background: var(--bg2); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: 'Jost', sans-serif; font-size: 18px; color: var(--text); outline: none; transition: border-color 0.2s; margin-bottom: 14px; letter-spacing: 0.05em; }
+  .setup-input:focus { border-color: var(--emerald); background: var(--surface); }
+  .setup-input::placeholder { color: var(--border-dark); }
+  .setup-status { font-size: 13px; min-height: 20px; margin-bottom: 6px; }
+  .setup-status.error { color: var(--danger); }
+  .setup-status.success { color: var(--emerald); }
+  .setup-status.loading { color: var(--muted); }
+  .btn-setup { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-family: 'Jost', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: all 0.2s; background: var(--acid); color: #1a2b1c; box-shadow: 0 4px 16px rgba(141,182,0,0.3); }
+  .btn-setup:hover { background: var(--acid-hover); transform: translateY(-1px); }
+  .btn-setup:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .setup-footnote { font-size: 12px; color: var(--border-dark); max-width: 300px; line-height: 1.7; font-weight: 300; text-align: center; }
+  .setup-onboarding { background: rgba(4,106,56,0.05); border: 1px solid rgba(4,106,56,0.2); border-radius: 10px; padding: 14px 16px; font-size: 12px; color: var(--text2); max-width: 340px; width: 100%; line-height: 1.7; font-weight: 300; text-align: left; }
+  .setup-onboarding-title { font-size: 12px; font-weight: 700; color: var(--emerald); margin-bottom: 6px; }
+
+  /* ---- Notify time card ---- */
+  .notify-time-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 10px; }
+  .notify-time-select { width: 100%; background: var(--bg2); border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: 'Jost', sans-serif; font-size: 15px; color: var(--text); outline: none; cursor: pointer; margin-top: 6px; margin-bottom: 10px; }
+  .notify-time-select:focus { border-color: var(--emerald); }
+  .notify-time-note { font-size: 12px; color: var(--muted); font-weight: 300; line-height: 1.6; }
+
+  /* ---- Recipe overlay ---- */
+  #recipe-overlay { display: none; position: fixed; inset: 0; background: rgba(26,43,28,0.45); z-index: 300; align-items: flex-end; justify-content: center; }
+  #recipe-overlay.visible { display: flex; }
+  .recipe-sheet { background: var(--bg); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; padding: 0 0 48px; box-shadow: 0 -8px 40px rgba(26,43,28,0.18); animation: slideUp 0.3s ease; }
+  .recipe-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 14px auto 0; }
+  .recipe-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px 0; }
+  .recipe-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: var(--text); }
+  .recipe-close { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 50%; width: 32px; height: 32px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .recipe-close:hover { background: var(--border); color: var(--text); }
+  .recipe-body { padding: 20px 24px 0; }
+  .recipe-intro { font-size: 13px; color: var(--muted); line-height: 1.7; font-weight: 300; margin-bottom: 20px; }
+  .recipe-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .recipe-card-title { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .recipe-ingredient { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--bg2); font-size: 14px; }
+  .recipe-ingredient:last-child { border-bottom: none; }
+  .recipe-ingredient .ing-name { color: var(--text2); font-weight: 400; }
+  .recipe-ingredient .ing-amount { color: var(--emerald); font-weight: 700; font-family: 'Playfair Display', serif; font-size: 16px; }
+  .recipe-steps { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .recipe-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--text2); line-height: 1.7; }
+  .recipe-step-num { background: var(--emerald); color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .recipe-steps li em { color: var(--text); font-style: normal; font-weight: 600; }
+  .recipe-note { background: var(--acid-bg); border: 1px solid rgba(141,182,0,0.3); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--acid-dark); line-height: 1.7; margin-top: 4px; }
+  .recipe-note strong { font-weight: 700; }
+  .recipe-warning { background: rgba(190,30,45,0.05); border: 1px solid rgba(190,30,45,0.2); border-radius: 10px; padding: 12px 14px; font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 12px; }
+  .recipe-warning strong { color: var(--ruby); font-weight: 600; }
+
+  /* ---- Instructions overlay ---- */
+  #instructions-overlay { display: none; position: fixed; inset: 0; background: rgba(26,43,28,0.45); z-index: 300; align-items: flex-end; justify-content: center; }
+  #instructions-overlay.visible { display: flex; }
+  .instructions-sheet { background: var(--bg); border-radius: 20px 20px 0 0; width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; padding: 0 0 40px; box-shadow: 0 -8px 40px rgba(26,43,28,0.18); animation: slideUp 0.3s ease; }
+  @keyframes slideUp { from { transform: translateY(60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .sheet-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 14px auto 0; }
+  .sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px 0; }
+  .sheet-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: var(--text); }
+  .sheet-close { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 50%; width: 32px; height: 32px; font-size: 18px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .sheet-close:hover { background: var(--border); color: var(--text); }
+  .sheet-intro { font-size: 13px; color: var(--muted); line-height: 1.7; padding: 10px 24px 4px; font-weight: 300; }
+  .sheet-tabs { display: flex; gap: 8px; padding: 16px 24px 0; }
+  .sheet-tab { flex: 1; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); font-family: 'Jost', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.2s; text-align: center; letter-spacing: 0.03em; }
+  .sheet-tab.active { background: var(--emerald); border-color: var(--emerald); color: #fff; }
+  .sheet-tab:hover:not(.active) { border-color: var(--border-dark); color: var(--text2); }
+  .sheet-panel { display: none; padding: 20px 24px 0; }
+  .sheet-panel.active { display: block; }
+  .instr-section { margin-bottom: 22px; }
+  .instr-section-title { font-family: 'Playfair Display', serif; font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .instr-section-title span { font-family: 'Jost', sans-serif; font-size: 12px; font-weight: 400; color: var(--muted); font-style: italic; }
+  .instr-steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .instr-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--text2); line-height: 1.65; }
+  .step-num { background: var(--emerald); color: #fff; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .step-num.acid { background: var(--acid); color: #1a2b1c; }
+  .instr-steps li em { color: var(--text); font-style: normal; font-weight: 600; }
+  .instr-note-inline { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); font-style: italic; font-weight: 300; line-height: 1.6; }
+  .autocheck-url-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 11px; color: var(--emerald); font-family: monospace; word-break: break-all; margin-top: 6px; display: block; line-height: 1.5; }
+
+  /* ---- Main app ---- */
+  .header { text-align: center; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 2px solid var(--border); }
+  .leaf-icon { display: block; width: 78px; height: 78px; margin: 0 auto 10px; }
+  h1 { font-family: "quincy-cf", serif; font-size: 32px; font-weight: 900; color: var(--text); letter-spacing: 0.01em; line-height: 1.2; text-transform: lowercase; }
+  h1 em { color: var(--text); font-style: normal; }
+
+  .btn { display: block; width: 100%; padding: 16px; border: none; border-radius: 10px; font-family: 'Jost', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.2s; margin-bottom: 10px; }
+  .btn-primary { background: var(--acid); color: #1a2b1c; box-shadow: 0 4px 18px rgba(141,182,0,0.35); }
+  .btn-primary:hover { background: var(--acid-hover); transform: translateY(-1px); box-shadow: 0 6px 22px rgba(141,182,0,0.45); }
+  .btn-reset-large { padding: 20px 16px; font-size: 16px; }
+  .btn-refresh { background: var(--surface); color: var(--muted); border: 1.5px solid var(--border); font-size: 13px; padding: 11px; }
+  .btn-refresh:hover { border-color: var(--border-dark); color: var(--text2); }
+  .btn-recipe { background: var(--surface); color: var(--text2); border: 1.5px solid var(--border); font-size: 13px; padding: 11px; font-weight: 500; letter-spacing: 0.03em; }
+  .btn-recipe:hover { border-color: var(--emerald); color: var(--emerald); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+  .weather-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(26,43,28,0.06); }
+  .weather-card-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 12px; font-weight: 600; text-align: center; }
+  .weather-row { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+  .weather-temp { font-family: 'Playfair Display', serif; font-size: 42px; font-weight: 700; color: var(--ruby); line-height: 1; }
+  .weather-desc { font-size: 13px; color: var(--muted); text-align: center; }
+  .weather-updated { font-size: 11px; color: var(--border-dark); margin-top: 5px; text-align: center; }
+  .interval-badge { background: var(--acid-bg); border: 1px solid rgba(141,182,0,0.4); border-radius: 6px; padding: 7px 12px; margin-top: 12px; font-size: 13px; color: var(--acid-dark); text-align: center; font-weight: 600; }
+
+  .toggle-section { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; box-shadow: 0 2px 10px rgba(26,43,28,0.06); }
+  .toggle-label { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700; color: var(--text); }
+  .toggle-desc { font-size: 12px; color: var(--muted); margin-top: 3px; font-weight: 300; }
+  .toggle { position: relative; width: 54px; height: 29px; flex-shrink: 0; }
+  .toggle input { display: none; }
+  .toggle-track { position: absolute; inset: 0; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 15px; cursor: pointer; transition: all 0.3s; }
+  .toggle-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; background: var(--border-dark); border-radius: 50%; transition: all 0.3s; }
+  .toggle input:checked ~ .toggle-track { background: rgba(4,106,56,0.12); border-color: var(--emerald); }
+  .toggle input:checked ~ .toggle-track::after { transform: translateX(25px); background: var(--emerald); box-shadow: 0 2px 8px rgba(4,106,56,0.4); }
+
+  .status-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; text-align: center; box-shadow: 0 2px 10px rgba(26,43,28,0.06); }
+  .status-inactive { color: var(--muted); font-style: italic; font-size: 16px; font-weight: 300; line-height: 1.6; }
+  .next-change-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .days-countdown { font-family: 'Playfair Display', serif; font-size: 80px; font-weight: 700; line-height: 1; margin: 2px 0; }
+  .days-countdown.urgent { color: var(--danger); }
+  .days-countdown.soon { color: var(--warn); }
+  .days-countdown.good { color: var(--emerald); }
+  .days-word { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.15em; font-weight: 600; }
+  .change-date { margin-top: 10px; font-size: 14px; color: var(--text2); font-weight: 300; }
+  .status-message { margin-top: 14px; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+  .status-message.alert { background: rgba(190,30,45,0.07); border: 1px solid rgba(190,30,45,0.25); color: var(--danger); }
+  .status-message.info { background: var(--acid-bg); border: 1px solid rgba(141,182,0,0.35); color: var(--acid-dark); }
+
+  .schedule-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(26,43,28,0.06); }
+  .schedule-title { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+  .schedule-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--bg2); font-size: 13px; }
+  .schedule-row:last-child { border-bottom: none; }
+  .schedule-range { color: var(--muted); font-weight: 400; }
+  .schedule-days { color: var(--text2); font-weight: 600; }
+  .schedule-row.active-row { background: var(--acid-bg); margin: 0 -8px; padding: 8px 8px; border-radius: 6px; border-bottom: none !important; }
+  .schedule-row.active-row .schedule-range { color: var(--acid-dark); font-weight: 500; }
+  .schedule-row.active-row .schedule-days { color: var(--acid-dark); }
+  .active-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--acid); display: inline-block; margin-right: 6px; vertical-align: middle; }
+
+  .log-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(26,43,28,0.06); }
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .log-title { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--text); }
+  .log-clear-all { font-size: 11px; color: var(--danger); background: none; border: none; cursor: pointer; font-family: 'Jost', sans-serif; font-weight: 500; opacity: 0.6; padding: 2px 0; letter-spacing: 0.04em; text-transform: uppercase; }
+  .log-clear-all:hover { opacity: 1; }
+  .log-entry { font-size: 13px; color: var(--muted); padding: 7px 0; border-bottom: 1px solid var(--bg2); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .log-date { color: var(--text2); flex-shrink: 0; font-weight: 500; }
+  .log-entry .log-note { flex: 1; font-weight: 300; }
+  .log-delete { background: none; border: none; color: var(--border-dark); cursor: pointer; font-size: 17px; line-height: 1; padding: 0 2px; flex-shrink: 0; transition: color 0.2s; }
+  .log-delete:hover { color: var(--danger); }
+  .empty-log { font-size: 13px; color: var(--border-dark); font-style: italic; font-weight: 300; }
+
+  /* ---- Bottom section ---- */
+  .bottom-divider { height: 1px; background: var(--border); margin: 24px 0 20px; }
+  .btn-guide { display: block; width: 100%; padding: 15px 20px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--surface); font-family: 'Jost', sans-serif; font-weight: 600; font-size: 14px; color: var(--text2); cursor: pointer; transition: all 0.2s; text-align: left; line-height: 1.4; margin-bottom: 10px; }
+  .btn-guide:hover { border-color: var(--emerald); color: var(--emerald); background: rgba(4,106,56,0.04); }
+  .btn-guide .btn-guide-title { display: block; font-size: 14px; font-weight: 600; }
+  .btn-guide .btn-guide-sub { display: block; font-size: 12px; color: var(--muted); font-weight: 300; margin-top: 2px; }
+  .settings-link { text-align: center; margin-top: 4px; margin-bottom: 20px; }
+  .settings-link button { background: none; border: none; color: var(--border-dark); font-family: 'Jost', sans-serif; font-size: 12px; cursor: pointer; letter-spacing: 0.05em; transition: color 0.2s; padding: 4px 0; }
+  .settings-link button:hover { color: var(--muted); }
+
+  .author-footer { text-align: center; padding-top: 16px; border-top: 1px solid var(--border); }
+  .author-credit { font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.9; }
+  .author-credit strong { color: var(--text2); font-weight: 600; }
+  .author-credit a { color: var(--emerald); text-decoration: none; font-weight: 500; }
+  .author-credit a:hover { color: var(--emerald-light); text-decoration: underline; }
+  .copyright { font-size: 11px; color: var(--border-dark); margin-top: 2px; letter-spacing: 0.03em; }
+</style>
+</head>
+<body>
+
+<!-- ---- Location setup overlay ---- -->
+<div id="location-overlay">
+  <img class="setup-leaf" src="nectar-buddy-logo.png" alt="Nectar Buddy">
+  <div class="setup-title">Welcome to<br><em>Nectar Buddy</em></div>
+  <div class="setup-tagline">Hummingbird nectar spoils faster in the heat. This tool tracks your local temperature and notifies you when it&rsquo;s time for a fresh batch.</div>
+  <div class="setup-divider"></div>
+  <div class="setup-prompt">Enter your zip code to get started.</div>
+  <div class="setup-card">
+    <label class="setup-field-label" for="zip-input">Your Zip Code</label>
+    <input class="setup-input" type="text" id="zip-input" inputmode="numeric" maxlength="5" placeholder="e.g. 62223" autocomplete="postal-code">
+    <div class="setup-status" id="setup-status"></div>
+    <button class="btn-setup" id="setup-btn" onclick="saveLocationData()">Save My Location</button>
+  </div>
+  <div class="setup-onboarding">
+    <div class="setup-onboarding-title">&#128247; Before you get started:</div>
+    Add this app to your home screen for the best experience and to receive notifications.<br><br>
+    <strong>iPhone:</strong> Tap the Share button in Safari, then choose <em>Add to Home Screen.</em><br><br>
+    <strong>Android:</strong> Tap the three-dot menu in Chrome, then choose <em>Add to Home Screen.</em><br><br>
+    &#128276; Once on your home screen, open the app and allow notifications when prompted so you receive alerts when it&rsquo;s time to change your feeders.
+  </div>
+  <div class="setup-footnote">You can update your location at any time from the main app.</div>
+  <div class="author-credit" style="margin-top:4px;">Created by <strong>Amy Rangel</strong> &bull; <a href="https://instagram.com/the.bird.zone" target="_blank">@the.bird.zone</a></div>
+</div>
+
+
+
+<!-- ---- Nectar recipe overlay ---- -->
+<div id="recipe-overlay" onclick="closeRecipe(event)">
+  <div class="recipe-sheet" id="recipe-sheet">
+    <div class="recipe-handle"></div>
+    <div class="recipe-header">
+      <div class="recipe-title">DIY Nectar Recipe</div>
+      <button class="recipe-close" onclick="closeRecipeBtn()">&times;</button>
+    </div>
+    <div class="recipe-body">
+      <p class="recipe-intro">A simple, safe nectar that hummingbirds love. No food coloring, no additives — just sugar and water.</p>
+
+      <div class="recipe-card">
+        <div class="recipe-card-title">Ingredients</div>
+        <div class="recipe-ingredient">
+          <span class="ing-name">White granulated sugar</span>
+          <span class="ing-amount">1 part</span>
+        </div>
+        <div class="recipe-ingredient">
+          <span class="ing-name">Water</span>
+          <span class="ing-amount">4 parts</span>
+        </div>
+        <div style="font-size:12px; color:var(--muted); margin-top:10px; font-weight:300; line-height:1.6;">
+          Example: &frac14; cup sugar + 1 cup water &mdash; scale up as needed.
+        </div>
+      </div>
+
+      <div class="recipe-card">
+        <div class="recipe-card-title">Instructions</div>
+        <ol class="recipe-steps">
+          <li><span class="recipe-step-num">1</span><span>Measure your sugar and water into a clean container or pitcher.</span></li>
+          <li><span class="recipe-step-num">2</span><span>Stir well until the sugar is <em>completely dissolved</em>. No heat needed.</span></li>
+          <li><span class="recipe-step-num">3</span><span>Pour into a clean feeder, or store the extra in an <em>airtight container</em> in the refrigerator.</span></li>
+        </ol>
+      </div>
+
+      <div class="recipe-note">
+        <strong>&#x1F9CA; Refrigerator storage:</strong> Homemade nectar keeps for up to <strong>2 weeks</strong> in the fridge in a clean, sealed container. Label it with the date so you know when to make a fresh batch.
+      </div>
+
+      <div class="recipe-warning">
+        <strong>Avoid:</strong> honey, brown sugar, raw sugar, or any food coloring — these can be harmful to hummingbirds. Use only plain white granulated sugar.
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ---- Main app ---- -->
+<div class="container" id="main-app">
+  <div class="header">
+    <img class="leaf-icon" src="nectar-buddy-logo.png" alt="Nectar Buddy">
+    <h1><em>Nectar Buddy</em></h1>
+  </div>
+
+  <button class="btn btn-primary btn-reset-large" id="reset-btn" onclick="resetFeeder()" disabled>&#x2713; I Changed the Feeders Today</button>
+
+  <div class="weather-card" id="weather-card" style="display:none">
+    <div class="weather-card-title" id="weather-card-title">Today&rsquo;s Forecast</div>
+    <div class="weather-row">
+      <div class="weather-temp" id="weather-temp">&mdash;</div>
+      <div style="text-align:center;">
+        <div class="weather-desc" id="weather-desc">&mdash;</div>
+        <div class="weather-updated" id="weather-updated">&mdash;</div>
+      </div>
+    </div>
+    <div class="interval-badge" id="interval-badge"></div>
+  </div>
+
+  <button class="btn btn-refresh" id="refresh-btn" onclick="refreshWeather()" disabled>&#8635; Refresh Weather</button>
+
+  <div class="status-card" id="status-card">
+    <p class="status-inactive">Turn on reminders when you put out your feeders.</p>
+  </div>
+
+  <div class="toggle-section">
+    <div>
+      <div class="toggle-label">Reminders Active</div>
+      <div class="toggle-desc" id="toggle-desc">Tap when feeders are out</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="active-toggle" onchange="handleToggle()">
+      <span class="toggle-track"></span>
+    </label>
+  </div>
+
+  <div class="schedule-card">
+    <div class="schedule-title">Change Schedule by Temperature</div>
+    <div class="schedule-row" id="row-75"><span class="schedule-range">75&deg;F and below</span><span class="schedule-days">Every 6 days</span></div>
+    <div class="schedule-row" id="row-80"><span class="schedule-range">76 &ndash; 80&deg;F</span><span class="schedule-days">Every 5 days</span></div>
+    <div class="schedule-row" id="row-84"><span class="schedule-range">81 &ndash; 84&deg;F</span><span class="schedule-days">Every 4 days</span></div>
+    <div class="schedule-row" id="row-88"><span class="schedule-range">85 &ndash; 88&deg;F</span><span class="schedule-days">Every 3 days</span></div>
+    <div class="schedule-row" id="row-92"><span class="schedule-range">89 &ndash; 92&deg;F</span><span class="schedule-days">Every 2 days</span></div>
+    <div class="schedule-row" id="row-93"><span class="schedule-range">93&deg;F and above</span><span class="schedule-days">Daily</span></div>
+  </div>
+
+  <div class="bottom-divider"></div>
+
+  <button class="btn btn-recipe" onclick="openRecipe()">&#x1F9EA; DIY Nectar Recipe</button>
+
+  <div class="notify-time-card">
+    <label class="setup-field-label" for="notify-time-select">&#128276; Daily Notification Time</label>
+    <select class="notify-time-select" id="notify-time-select" onchange="setNotifyTime(this.value)">
+      <option value="06:00">6:00 AM</option>
+      <option value="07:00">7:00 AM</option>
+      <option value="08:00">8:00 AM</option>
+      <option value="09:00">9:00 AM</option>
+      <option value="10:00">10:00 AM</option>
+      <option value="11:00">11:00 AM</option>
+      <option value="12:00">12:00 PM</option>
+      <option value="13:00">1:00 PM</option>
+      <option value="14:00">2:00 PM</option>
+      <option value="15:00">3:00 PM</option>
+      <option value="16:00">4:00 PM</option>
+      <option value="17:00">5:00 PM</option>
+      <option value="18:00">6:00 PM</option>
+    </select>
+    <div class="notify-time-note">Make sure to accept notifications when prompted in order to receive notifications.</div>
+  </div>
+
+  <div class="bottom-divider"></div>
+
+  <div class="log-card">
+    <div class="log-header">
+      <div class="log-title">Change Log</div>
+      <button class="log-clear-all" onclick="clearAllLog()">Clear All</button>
+    </div>
+    <div id="log-list"><p class="empty-log">No changes recorded yet.</p></div>
+  </div>
+
+  <div class="settings-link">
+    <button onclick="openLocationSetup(false)">&#9965; Change my location</button>
+  </div>
+
+  <div class="author-footer">
+    <div class="author-credit">
+      Created by <strong>Amy Rangel</strong> &bull; <a href="https://instagram.com/the.bird.zone" target="_blank">@the.bird.zone</a>
+    </div>
+    <div class="copyright">&copy; 2026 Amy Rangel. All rights reserved.</div>
+  </div>
+</div>
+
+<script>
+// NOTE: named 'userLocation' (not 'location') to avoid shadowing window.location
+let state = { active: false, lastChanged: null, lastTemp: null, lastWeatherTime: null, changeLog: [], effectiveDueDate: null, peakTemp: null, peakTempDate: null, peakType: null, lastNotifiedDueDate: null, notifyTime: '08:00' };
+let userLocation = { zip: null, lat: null, lon: null, city: null, timezone: null };
+
+function loadState() {
+  try { const s = localStorage.getItem('hb-feeder-state'); if (s) state = {...state, ...JSON.parse(s)}; } catch(e) {}
+}
+function saveState() {
+  try { localStorage.setItem('hb-feeder-state', JSON.stringify(state)); } catch(e) {}
+}
+function loadUserLocation() {
+  try { const s = localStorage.getItem('hb-feeder-location'); if (s) userLocation = {...userLocation, ...JSON.parse(s)}; } catch(e) {}
+}
+function saveUserLocation() {
+  try { localStorage.setItem('hb-feeder-location', JSON.stringify(userLocation)); } catch(e) {}
+}
+
+function getInterval(t) {
+  if (t >= 93) return 1; if (t >= 89) return 2; if (t >= 85) return 3;
+  if (t >= 81) return 4; if (t >= 76) return 5; return 6;
+}
+function updateEffectiveDueDate(temp) {
+  if (!state.lastChanged || !temp) return;
+  const interval = getInterval(temp);
+  const due = new Date(state.lastChanged + 'T12:00:00');
+  due.setDate(due.getDate() + interval);
+  state.effectiveDueDate = due.toISOString().split('T')[0];
+}
+function today() {
+  const tz = userLocation.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz });
+}
+function daysBetween(d1, d2) {
+  const date1 = new Date(d1 + 'T00:00:00');
+  const date2 = new Date(d2 + 'T00:00:00');
+  return Math.round((date2 - date1) / 86400000);
+}
+function formatDate(iso) {
+  if (!iso) return '';
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+}
+// ---- Server config ----
+const SERVER_URL = 'https://nectar-buddy-server.onrender.com';
+
+function getUserId() {
+  let id = localStorage.getItem('hb-user-id');
+  if (!id) { id = 'u_' + Math.random().toString(36).substr(2, 12) + '_' + Date.now(); localStorage.setItem('hb-user-id', id); }
+  return id;
+}
+
+async function registerPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const keyResp = await fetch(SERVER_URL + '/api/vapid-public-key');
+    const { publicKey } = await keyResp.json();
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    });
+    return sub;
+  } catch(e) { console.error('Push registration failed:', e); return null; }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function syncToServer(pushSubscription, retries = 3) {
+  if (!userLocation.lat) return;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const resp = await fetch(SERVER_URL + '/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: getUserId(),
+          zip: userLocation.zip,
+          lat: userLocation.lat,
+          lon: userLocation.lon,
+          city: userLocation.city,
+          timezone: userLocation.timezone || null,
+          pushSubscription: pushSubscription || undefined,
+          notifyTime: state.notifyTime || '08:00',
+          active: state.active,
+          lastChanged: state.lastChanged,
+          effectiveDueDate: state.effectiveDueDate,
+          peakTemp: state.peakTemp,
+          peakTempDate: state.peakTempDate,
+          peakType: state.peakType,
+          lastNotifiedDueDate: state.lastNotifiedDueDate
+        })
+      });
+      if (resp.ok) return;
+    } catch(e) {
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 5000));
+      else console.error('Server sync failed after retries:', e);
+    }
+  }
+}
+
+async function syncStateToServer() {
+  if (!userLocation.lat) return;
+  try {
+    await fetch(SERVER_URL + '/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: getUserId(),
+        active: state.active,
+        notifyTime: state.notifyTime || '08:00',
+        lastChanged: state.lastChanged,
+        effectiveDueDate: state.effectiveDueDate,
+        peakTemp: state.peakTemp,
+        peakTempDate: state.peakTempDate,
+        peakType: state.peakType,
+        lastNotifiedDueDate: state.lastNotifiedDueDate
+      })
+    });
+  } catch(e) { console.error('State sync failed:', e); }
+}
+
+async function requestNotificationPermissionAndRegister() {
+  if (!('Notification' in window)) return;
+  const permission = await Notification.requestPermission();
+  if (permission === 'granted') {
+    const sub = await registerPush();
+    await syncToServer(sub);
+  }
+}
+
+// ---- Location setup ----
+function openLocationSetup(isFirst) {
+  const overlay = document.getElementById('location-overlay');
+  const input = document.getElementById('zip-input');
+  const status = document.getElementById('setup-status');
+  overlay.classList.add('visible');
+  status.textContent = ''; status.className = 'setup-status';
+  document.getElementById('setup-btn').disabled = false;
+  if (!isFirst && userLocation.zip) input.value = userLocation.zip;
+  else input.value = '';
+  setTimeout(() => input.focus(), 100);
+}
+function closeLocationSetup() {
+  document.getElementById('location-overlay').classList.remove('visible');
+}
+async function saveLocationData() {
+  const zip = document.getElementById('zip-input').value.trim();
+  const status = document.getElementById('setup-status');
+  const btn = document.getElementById('setup-btn');
+  if (!/^\d{5}$/.test(zip)) {
+    status.textContent = 'Please enter a valid 5-digit zip code.';
+    status.className = 'setup-status error'; return;
+  }
+  status.textContent = 'Looking up your location\u2026';
+  status.className = 'setup-status loading'; btn.disabled = true;
+  try {
+    const geoResp = await fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + zip + '&count=1&language=en&format=json&countryCode=US');
+    const geoData = await geoResp.json();
+    if (!geoData.results || geoData.results.length === 0) {
+      status.textContent = 'Zip code not found. Please try again.';
+      status.className = 'setup-status error'; btn.disabled = false; return;
+    }
+    const result = geoData.results[0];
+    userLocation.zip = zip;
+    userLocation.lat = result.latitude;
+    userLocation.lon = result.longitude;
+    userLocation.city = result.name + (result.admin1 ? ', ' + result.admin1 : '');
+    // Get timezone from a quick weather API call using the coordinates
+    try {
+      const tzResp = await fetch('https://api.open-meteo.com/v1/forecast?latitude=' + result.latitude + '&longitude=' + result.longitude + '&timezone=auto&forecast_days=1&daily=temperature_2m_max');
+      const tzData = await tzResp.json();
+      userLocation.timezone = tzData.timezone || null;
+    } catch(e) { userLocation.timezone = null; }
+    status.textContent = '\u2713 Found: ' + userLocation.city;
+    status.className = 'setup-status success';
+    saveUserLocation();
+    state.lastTemp = null; state.lastWeatherTime = null; saveState();
+    setTimeout(async () => {
+      closeLocationSetup(); updateUI();
+      if (state.active) refreshWeather();
+      await requestNotificationPermissionAndRegister();
+    }, 900);
+  } catch(e) {
+    status.textContent = 'Could not look up location. Check your connection.';
+    status.className = 'setup-status error'; btn.disabled = false;
+  }
+}
+document.getElementById('zip-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') saveLocationData();
+});
+
+// ---- Recipe overlay ----
+function openRecipe() {
+  document.getElementById('recipe-overlay').classList.add('visible');
+  document.body.style.overflow = 'hidden';
+}
+function closeRecipeBtn() {
+  document.getElementById('recipe-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+function closeRecipe(e) {
+  if (e.target === document.getElementById('recipe-overlay')) closeRecipeBtn();
+}
+
+// ---- Notification time ----
+function setNotifyTime(time) {
+  state.notifyTime = time;
+  saveState();
+  syncStateToServer();
+  updateNotifyTimeUI();
+}
+function updateNotifyTimeUI() {
+  const sel = document.getElementById('notify-time-select');
+  if (sel) sel.value = state.notifyTime || '08:00';
+}
+
+// ---- Weather ----
+async function fetchWeather() {
+  if (!userLocation.lat || !userLocation.lon) throw new Error('No location set');
+
+  const todayStr = today();
+
+  // Cap forecast window at current due date if known, otherwise use full 6-day window
+  const maxForecastEnd = new Date(todayStr + 'T12:00:00');
+  maxForecastEnd.setDate(maxForecastEnd.getDate() + 5); // today + 5 more = 6 days total
+  const maxForecastEndStr = maxForecastEnd.toISOString().split('T')[0];
+  // Cap at due date but never let it go earlier than today (handles overdue case)
+  const forecastEndStr = state.effectiveDueDate && state.effectiveDueDate > todayStr && state.effectiveDueDate < maxForecastEndStr
+    ? state.effectiveDueDate
+    : maxForecastEndStr;
+
+  const yesterday = new Date(todayStr + 'T12:00:00');
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const resetDate = state.lastChanged || todayStr;
+
+  const allTemps = [];
+  let peakTemp = null, peakTempDate = null;
+
+  // Always fetch 6-day forecast starting today; optionally fetch actuals since reset
+  const fetchPromises = [
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=' + userLocation.lat + '&longitude=' + userLocation.lon +
+      '&daily=temperature_2m_max&temperature_unit=fahrenheit&start_date=' + todayStr + '&end_date=' + forecastEndStr + '&timezone=auto')
+  ];
+  if (resetDate < todayStr) {
+    fetchPromises.push(
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=' + userLocation.lat + '&longitude=' + userLocation.lon +
+        '&daily=temperature_2m_max&temperature_unit=fahrenheit&start_date=' + resetDate + '&end_date=' + yesterdayStr + '&timezone=auto')
+    );
+  }
+
+  const responses = await Promise.all(fetchPromises);
+  const forecastData = await responses[0].json();
+  const actualsData = responses[1] ? await responses[1].json() : null;
+
+  // Load forecast entries
+  if (forecastData.daily && forecastData.daily.temperature_2m_max) {
+    forecastData.daily.time.forEach((date, i) => {
+      const t = forecastData.daily.temperature_2m_max[i];
+      if (t != null) allTemps.push({ date, temp: Math.round(t), type: 'forecast' });
+    });
+  }
+
+  // Load actuals, replacing forecast entries for the same date
+  if (actualsData && actualsData.daily && actualsData.daily.temperature_2m_max) {
+    actualsData.daily.time.forEach((date, i) => {
+      const t = actualsData.daily.temperature_2m_max[i];
+      if (t != null) {
+        const existing = allTemps.findIndex(x => x.date === date);
+        if (existing >= 0) allTemps[existing] = { date, temp: Math.round(t), type: 'actual' };
+        else allTemps.push({ date, temp: Math.round(t), type: 'actual' });
+      }
+    });
+  }
+
+  // For each temp entry, calculate the due date it would generate.
+  // For future forecasts, the due date can never be earlier than the forecast date itself.
+  // Find the entry that produces the earliest valid due date.
+  let peakType = null;
+  let bestDueDate = null;
+
+  allTemps.forEach(entry => {
+    const interval = getInterval(entry.temp);
+    const due = new Date(state.lastChanged + 'T12:00:00');
+    due.setDate(due.getDate() + interval);
+    let dueDateStr = due.toISOString().split('T')[0];
+
+    // Due date can never be earlier than the date the temp occurred (applies to all entries)
+    if (dueDateStr < entry.date) {
+      dueDateStr = entry.date;
+    }
+
+    // Pick the entry that produces the earliest due date
+    if (bestDueDate === null || dueDateStr < bestDueDate) {
+      bestDueDate = dueDateStr;
+      peakTemp = entry.temp;
+      peakTempDate = entry.date;
+      peakType = entry.type;
+    }
+  });
+
+  // todayTemp should always be today's forecast/actual specifically, not the peak
+  const todayForecastEntry = allTemps.find(x => x.date === todayStr && x.type === 'forecast');
+  const todayActualEntry = allTemps.find(x => x.date === todayStr && x.type === 'actual');
+  const todayTempEntry = todayActualEntry || todayForecastEntry;
+  const todayTemp = todayTempEntry ? todayTempEntry.temp : null;
+
+  return { todayTemp, peakTemp, peakTempDate, peakType, bestDueDate, allTemps };
+}
+async function refreshWeather() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) { btn.textContent = 'Fetching...'; btn.disabled = true; }
+  try {
+    const w = await fetchWeather();
+    state.lastTemp = w.todayTemp;
+    state.lastWeatherTime = new Date().toISOString();
+    state.peakTemp = w.peakTemp;
+    state.peakTempDate = w.peakTempDate;
+    state.peakType = w.peakType;
+    if (w.bestDueDate) state.effectiveDueDate = w.bestDueDate;
+    saveState(); updateUI();
+  } catch(e) {
+    alert('Could not fetch weather. Check your connection and try again.');
+  }
+  if (btn) { btn.textContent = '\u21BB Refresh Weather'; btn.disabled = !state.active; }
+}
+
+function handleToggle() {
+  state.active = document.getElementById('active-toggle').checked;
+  if (state.active) {
+    if (!state.lastChanged) {
+      state.lastChanged = today();
+      state.effectiveDueDate = null;
+      state.peakTemp = null; state.peakTempDate = null; state.peakType = null; state.lastNotifiedDueDate = null;
+      state.changeLog.unshift({date: today(), note: 'Feeders put out'});
+    }
+    if (!state.lastTemp) refreshWeather();
+    requestNotificationPermissionAndRegister();
+  }
+  saveState(); updateUI(); syncStateToServer();
+}
+
+function resetFeeder() {
+  state.lastChanged = today();
+  state.effectiveDueDate = null;
+  state.peakTemp = null; state.peakTempDate = null; state.peakType = null; state.lastNotifiedDueDate = null;
+  state.changeLog.unshift({date: today(), note: 'Feeders changed'});
+  if (state.changeLog.length > 10) state.changeLog.pop();
+  saveState(); refreshWeather(); syncStateToServer();
+}
+
+function fireNotificationIfNeeded() {
+  if (!state.active || !state.lastTemp || !state.lastChanged || !state.effectiveDueDate) return false;
+  const daysLeft = daysBetween(today(), state.effectiveDueDate);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    if (daysLeft <= 0) {
+      new Notification('\uD83C\uDF43 Change Hummingbird Feeders!', {body: "It's time to refresh your nectar! (" + state.lastTemp + '\u00b0F today)'});
+      state.lastNotifiedDueDate = state.effectiveDueDate;
+      saveState();
+      return true;
+    }
+    if (daysLeft === 1) {
+      const alreadyNotified = state.lastNotifiedDueDate === state.effectiveDueDate;
+      const title = alreadyNotified
+        ? '\uD83C\uDF43 Schedule Adjusted'
+        : '\uD83C\uDF43 Feeder Change Tomorrow';
+      const body = alreadyNotified
+        ? 'Schedule has been adjusted \u2014 feeder change now due tomorrow. (' + state.lastTemp + '\u00b0F today)'
+        : 'Heads-up \u2014 change the feeders tomorrow. (' + state.lastTemp + '\u00b0F today)';
+      new Notification(title, {body});
+      state.lastNotifiedDueDate = state.effectiveDueDate;
+      saveState();
+      return true;
+    }
+  }
+  return false;
+}
+
+function highlightRow(temp) {
+  ['row-75','row-80','row-84','row-88','row-92','row-93'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('active-row');
+    const dot = el.querySelector('.active-dot'); if (dot) dot.remove();
+  });
+  const aid = temp>=93?'row-93':temp>=89?'row-92':temp>=85?'row-88':temp>=81?'row-84':temp>=76?'row-80':'row-75';
+  const el = document.getElementById(aid);
+  el.classList.add('active-row');
+  const dot = document.createElement('span'); dot.className = 'active-dot';
+  el.querySelector('.schedule-range').prepend(dot);
+}
+
+function updateUI() {
+  if (userLocation.city) {
+    document.getElementById('weather-card-title').textContent = "Today\u2019s Forecast \u2014 " + userLocation.city;
+  }
+  document.getElementById('active-toggle').checked = state.active;
+  document.getElementById('reset-btn').disabled = !state.active;
+  document.getElementById('refresh-btn').disabled = !state.active;
+  document.getElementById('toggle-desc').textContent = state.active ? 'Reminders are running' : 'Tap when feeders are out';
+
+  const wc = document.getElementById('weather-card');
+  const sc = document.getElementById('status-card');
+
+  if (!state.active) {
+    wc.style.display = 'none';
+    sc.innerHTML = '<p class="status-inactive">Turn on reminders when you put out your feeders.</p>';
+    return;
+  }
+
+  wc.style.display = 'block';
+  if (state.lastTemp) {
+    document.getElementById('weather-temp').textContent = state.lastTemp + '\u00b0F';
+    document.getElementById('weather-desc').textContent = "Today's high";
+    document.getElementById('weather-updated').textContent = state.lastWeatherTime
+      ? 'Updated ' + new Date(state.lastWeatherTime).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'})
+      : '';
+    const interval = getInterval(state.lastTemp);
+    const basisTemp = state.peakTemp || state.lastTemp;
+    const basisDate = state.peakTempDate ? formatDate(state.peakTempDate) : formatDate(today());
+    const basisInterval = getInterval(basisTemp);
+    const isActual = state.peakType === 'actual';
+    const basisLabel = isActual ? 'actual high of' : 'forecasted high of';
+    const basisContext = isActual ? 'recorded on ' + basisDate : 'forecast for ' + basisDate;
+    document.getElementById('interval-badge').textContent = 'Based on ' + basisLabel + ' ' + basisTemp + '\u00b0F (' + basisContext + ') \u2014 change every ' + basisInterval + ' day' + (basisInterval > 1 ? 's' : '');
+    highlightRow(state.peakTemp || state.lastTemp);
+  } else {
+    document.getElementById('weather-temp').textContent = '\u2014';
+    document.getElementById('weather-desc').textContent = 'Loading weather...';
+    document.getElementById('interval-badge').textContent = '';
+  }
+
+  if (state.lastChanged && state.lastTemp && state.effectiveDueDate) {
+    const daysLeft = daysBetween(today(), state.effectiveDueDate);
+    const dueDate = new Date(state.effectiveDueDate + 'T12:00:00');
+    const dueDateStr = dueDate.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+    const cls = daysLeft <= 1 ? 'urgent' : daysLeft === 2 ? 'soon' : 'good';
+    const msg = daysLeft <= 0
+      ? '<div class="status-message alert">' + (daysLeft === 0 ? '&#9888;&#65039; Change feeders today!' : '&#9888;&#65039; Overdue by ' + Math.abs(daysLeft) + ' day' + (Math.abs(daysLeft) > 1 ? 's' : '') + '!') + '</div>'
+      : daysLeft === 1
+      ? '<div class="status-message alert">&#128276; Change feeders tomorrow!</div>'
+      : '<div class="status-message info">&#10003; Last changed ' + formatDate(state.lastChanged) + '</div>';
+    sc.innerHTML = '<div class="next-change-label">Next Change In</div>'
+      + '<div class="days-countdown ' + cls + '">' + (daysLeft <= 0 ? (daysLeft === 0 ? '0' : daysLeft) : daysLeft) + '</div>'
+      + '<div class="days-word">' + (daysLeft < 0 ? 'OVERDUE' : daysLeft === 0 ? 'TODAY' : daysLeft === 1 ? 'DAY' : 'DAYS') + '</div>'
+      + '<div class="change-date">Due ' + dueDateStr + '</div>' + msg;
+  } else {
+    sc.innerHTML = '<p class="status-inactive">Fetching weather\u2026</p>';
+  }
+
+  const logList = document.getElementById('log-list');
+  if (!state.changeLog || state.changeLog.length === 0) {
+    logList.innerHTML = '<p class="empty-log">No changes recorded yet.</p>';
+  } else {
+    logList.innerHTML = state.changeLog.slice(0, 8).map((e, i) =>
+      '<div class="log-entry"><span class="log-date">' + formatDate(e.date) + '</span><span class="log-note">' + (e.note || 'Feeders changed') + '</span><button class="log-delete" onclick="deleteLogEntry(' + i + ')" title="Delete">&times;</button></div>'
+    ).join('');
+  }
+}
+
+function deleteLogEntry(i) { state.changeLog.splice(i, 1); saveState(); updateUI(); }
+function clearAllLog() {
+  if (state.changeLog.length === 0) return;
+  if (confirm('Clear all log entries?')) { state.changeLog = []; saveState(); updateUI(); }
+}
+
+// ---- Init ----
+loadState();
+loadUserLocation();
+
+// Register service worker for push notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/nectar-buddy/sw.js').catch(e => console.log('SW registration failed:', e));
+}
+
+if (!userLocation.lat) openLocationSetup(true);
+updateUI();
+updateNotifyTimeUI();
+if (state.active && state.lastWeatherTime && (Date.now() - new Date(state.lastWeatherTime).getTime()) > 10800000) {
+  refreshWeather();
+}
+// Attempt to sync to server on load in case registration was missed
+if (userLocation.lat) {
+  fetch(SERVER_URL + '/').catch(() => {});
+  setTimeout(() => {
+    registerPush().then(sub => syncToServer(sub));
+  }, 15000);
+}
+
+
+</script>
+</body>
+</html>
