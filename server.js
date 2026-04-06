@@ -227,12 +227,6 @@ app.get('/api/vapid-public-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
 });
 
-app.get('/api/debug-users', async (req, res) => {
-  const { data: users, error } = await supabase.from('users').select('id, zip, city, active, notify_time, last_changed, effective_due_date, updated_at, push_subscription');
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ count: users.length, users: users.map(u => ({ ...u, hasPushSub: !!u.push_subscription, push_subscription: undefined })) });
-});
-
 app.get('/', (req, res) => res.json({ status: 'Nectar Buddy server running' }));
 
 const PORT = process.env.PORT || 3000;
